@@ -21,6 +21,7 @@ from mikazuki.tagger.interrogator import (available_interrogators,
 
 app = FastAPI()
 lock = Lock()
+process = None
 avaliable_scripts = [
     "networks/extract_lora_from_models.py",
     "networks/extract_lora_from_dylora.py"
@@ -51,14 +52,16 @@ def run_train(toml_path: str,
         "--config_file", toml_path,
     ]
     try:
-        result = subprocess.run(args, env=os.environ)
-        if result.returncode != 0:
+        process = subprocess.Popen(args, env=os.environ)
+        returnCode = process.wait()
+        if returnCode != 0:
             print(f"Training failed / 训练失败")
         else:
             print(f"Training finished / 训练完成")
     except Exception as e:
         print(f"An error occurred when training / 创建训练进程时出现致命错误: {e}")
     finally:
+        process = None
         lock.release()
 
 
@@ -142,6 +145,14 @@ async def run_interrogate(req: TaggerInterrogateRequest, background_tasks: Backg
                               unload_model_after_running=True
                               )
     return {"status": "success"}
+
+
+@app.post("/api/terminte_task")
+async def terminte_training_task():
+    if(process != None and isinstance(process, subprocess.Popen)):
+        process.terminate()
+        return {"status": "success"}
+    return {"status": "fail", "detail": "当前没有正在进行的训练"}
 
 
 @app.get("/")
